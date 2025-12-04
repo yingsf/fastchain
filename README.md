@@ -1,0 +1,2 @@
+# fastchain
+FastAPI + LangChain
