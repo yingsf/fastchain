@@ -1,0 +1,29 @@
+# FastChain 项目配置模板（由 fastchain init 生成）
+#
+# 运行环境切换：
+#   - RUN_ENV_TYPE=dev|test|prod（默认 dev）
+# 环境变量覆盖：
+#   - APP_CONFIG_ 前缀覆盖同名配置项，例如：
+#     APP_CONFIG_APOLLO_SERVER_URL=https://...
+#
+# 注意：Apollo 为必选依赖，apollo_server_url / apollo_app_id 必填。
+#
+# 重要：Apollo 中必须在 apollo_namespace 对应的 namespace 下配置 key=system.config（JSON 字符串）。
+#      FastChain 启动时会强制读取该配置并进行模块自动发现（resources.modules / routers.modules）。
+
+[default]
+apollo_server_url = "{apollo_server_url}"
+apollo_app_id = "{apollo_app_id}"
+apollo_cluster = "{apollo_cluster}"
+apollo_namespace = "{apollo_namespace}"
+
+[default.logging]
+level = "INFO"
+enqueue = true
+sinks = ["console", "file"]
+
+[dev]
+# 开发环境覆盖项（可选）
+
+[prod]
+# 生产环境覆盖项（可选）

@@ -1,0 +1,36 @@
+{
+  "ds": {
+    "provider_type": "openai",
+    "model_name": "deepseek-chat",
+    "base_url": "https://api.openai.com/v1",
+    "api_key": "<YOUR_API_KEY>",
+    "temperature": 0.0,
+    "max_tokens": 8000,
+    "timeout": 60.0,
+    "max_retries": 3,
+    "max_concurrency": 10,
+    "qps": 10
+  },
+  "yuanjing-test-qwen2.5-72b": {
+    "provider_type": "china_unicom",
+    "model_name": "Qwen2.5-72B",
+    "base_url": "http://<host>:<port>/v1",
+    "app_id": "<APP_ID>",
+    "api_key": "Bearer <TOKEN>",
+    "app_secret": "<APP_SECRET>",
+    "temperature": 0.6,
+    "max_tokens": 8000,
+    "top_p": 0.95,
+    "timeout": 60.0,
+    "max_retries": 3,
+    "max_concurrency": 10,
+    "qps": 10,
+    "default_headers": {
+      "scene_code": "<SCENE_CODE>"
+    },
+    "model_kwargs": {
+      "presence_penalty": 1.0,
+      "frequency_penalty": 0
+    }
+  }
+}

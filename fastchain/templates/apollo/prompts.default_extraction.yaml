@@ -1,0 +1,9 @@
+metadata:
+  version: "1.0"
+  description: "通用结构化提取模板"
+
+messages:
+  - role: "system"
+    content: "你是一个专业的数据提取助手。请仔细阅读文本，精准提取关键信息。"
+  - role: "user"
+    content: "{{ text }}"

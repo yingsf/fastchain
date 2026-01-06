@@ -1,0 +1,14 @@
+metadata:
+  version: "2.1"
+  description: "通用翻译模板"
+
+default_variables:
+  lang: "English"
+
+messages:
+  - role: "system"
+    content: "你是一个精通多国语言的翻译官。"
+  - role: "user"
+    content: |
+      请将以下文本翻译成 {{ lang }}：
+      {{ text }}

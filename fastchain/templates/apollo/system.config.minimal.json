@@ -1,0 +1,5 @@
+{
+  "prompts": { "prefix": "prompts." },
+  "resources": { "modules": ["{resource_root}"] },
+  "routers": { "modules": ["{router_root}"] }
+}

@@ -1,0 +1,81 @@
+{
+  "apollo": {
+    "poll_interval": 10,
+    "qps": 5,
+    "max_concurrency": 10
+  },
+  "database": {
+    "url": "sqlite+aiosqlite:///./fastchain.db",
+    "echo": false,
+    "pool_size": 20,
+    "max_overflow": 10,
+    "pool_recycle": 3600
+  },
+  "mongodb": {
+    "uri": "mongodb://<user>:<password>@<host>:<port>/?authSource=<db>&authMechanism=SCRAM-SHA-1",
+    "database": "<db_name>",
+    "models_package": "<your.models.package>",
+    "model_discovery_concurrency": 20,
+    "min_pool_size": 10,
+    "max_pool_size": 100,
+    "timeout_ms": 5000
+  },
+  "redis": {
+    "url": "redis://:<password>@<host>:<port>/0",
+    "max_connections": 20,
+    "socket_timeout": 5.0,
+    "socket_connect_timeout": 2.0,
+    "retry_on_timeout": true,
+    "encoding": "utf-8",
+    "decode_responses": true
+  },
+  "prompts": { "prefix": "prompts." },
+  "llm_service": {
+    "structure_retry_count": 3,
+    "connection_limits": {
+      "max_keepalive_connections": 20,
+      "max_connections": 100
+    }
+  },
+  "security": {
+    "parser_max_length": 1000000,
+    "audit_log_max_length": 2000,
+    "stream_buffer_max_tokens": 10000,
+    "cors": {
+      "enabled": true,
+      "allow_origins": ["http://localhost:3000"],
+      "allow_methods": ["*"],
+      "allow_headers": ["*"],
+      "allow_credentials": true,
+      "max_age": 600
+    }
+  },
+  "timeouts": {
+    "watcher_tick_timeout": 60.0,
+    "watcher_stop_timeout": 5.0,
+    "redis_health_interval": 30.0,
+    "mongo_health_interval": 60.0,
+    "db_health_interval": 60.0
+  },
+  "scheduler": {
+    "enabled": false,
+    "timezone": "Asia/Shanghai",
+    "lock_ttl_ms": 60000,
+    "modules": []
+  },
+  "resources": {
+    "modules": [
+      "fastchain.core.db.relational",
+      "fastchain.core.db.mongo",
+      "fastchain.core.llm",
+      "fastchain.core.db.redis",
+      "fastchain.core.scheduler",
+      "{resource_root}"
+    ]
+  },
+  "routers": {
+    "modules": [
+      "{router_root}"
+    ]
+  }
+}

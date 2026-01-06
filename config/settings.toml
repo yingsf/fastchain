@@ -1,0 +1,38 @@
+# FastChain 项目配置（TOML，支持多环境）
+#
+# 运行环境切换：
+#   - 通过环境变量 RUN_ENV_TYPE 指定（dev/test/prod），默认 dev
+# 环境变量覆盖：
+#   - 支持 APP_CONFIG_ 前缀的环境变量覆盖同名配置项
+#     例如：APP_CONFIG_APOLLO_SERVER_URL=https://...
+#
+# 注意：Apollo 在 fastchain-cucc 中是必选依赖，apollo_server_url / apollo_app_id 必填。
+
+[default]
+# Apollo 配置中心地址（必填）
+apollo_server_url = ""
+
+# Apollo appId（必填）
+apollo_app_id = "fastchain"
+
+# Apollo 集群（可选，默认值为 "default"）
+apollo_cluster = "default"
+
+# Apollo namespace（可选，默认值为 "application"）
+apollo_namespace = "application"
+
+[default.logging]
+# 日志级别：DEBUG / INFO / WARNING / ERROR
+level = "INFO"
+
+# 是否启用异步日志队列（生产环境建议 true）
+enqueue = true
+
+# sinks 可选：console / file / graylog
+sinks = ["console", "file"]
+
+[dev]
+# 开发环境可覆盖 default 中的同名配置项
+
+[prod]
+# 生产环境可覆盖 default 中的同名配置项
