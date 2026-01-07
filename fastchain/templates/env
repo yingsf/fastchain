@@ -1,8 +1,3 @@
-# FastChain 运行环境（由 fastchain init 生成）
 RUN_ENV_TYPE={run_env_type}
-
-# 显式指定项目根目录（可选；容器/部署环境中建议配置）
 # PROJECT_ROOT={project_root}
-
-# 通过 APP_CONFIG_ 前缀覆盖配置项（可选）
 # APP_CONFIG_APOLLO_SERVER_URL=

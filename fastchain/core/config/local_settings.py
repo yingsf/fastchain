@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import locale
+from pathlib import Path
+
 import os
 from functools import lru_cache
 from typing import Any, Literal, Optional, List, Dict
@@ -116,6 +119,93 @@ class LoggingSettings(BaseModel):
     console: LoggingConsoleSettings = Field(default_factory=LoggingConsoleSettings)
     file: LoggingFileSettings = Field(default_factory=LoggingFileSettings)
     graylog: LoggingGraylogSettings = Field(default_factory=LoggingGraylogSettings)
+
+
+# ------------------------------------------------------------------
+# .env 编码兼容兜底（Windows GBK / UTF-8 差异）
+# ------------------------------------------------------------------
+
+
+def _find_dotenv(start_dir: Path | None = None, filename: str = ".env") -> Path | None:
+    """向上搜索 .env 文件路径。
+
+    在 Windows 中文环境下，系统默认编码通常为 GBK/cp936。若 `.env` 文件实际为 UTF-8
+    （例如包含中文注释、全角符号或某些 Unicode 字符），Dynaconf 内置的 dotenv 读取
+    可能因未显式指定编码而触发 `UnicodeDecodeError`。
+
+    本函数用于在 FastChain 内部“先行定位 .env”，并配合 `_safe_load_dotenv()` 以更稳妥的
+    编码策略加载到 `os.environ`，从而实现跨平台“**不炸**”。
+
+    Args:
+        start_dir: 搜索起点目录。默认使用当前工作目录（Path.cwd()）。
+        filename: dotenv 文件名。默认 ".env"。
+
+    Returns:
+        找到则返回路径，否则返回 None。
+    """
+    base = start_dir or Path.cwd()
+    for parent in (base, *base.parents):
+        candidate = parent / filename
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _safe_load_dotenv(override: bool = False) -> Path | None:
+    """以“跨平台不炸”为目标加载 .env 到进程环境变量。
+
+    设计目标：
+    1. **零中断兼容**：无论 `.env` 是否存在、是否包含异常字符，都不阻断启动。
+    2. **跨平台一致**：优先按 UTF-8（含 BOM）读取；失败回退到系统首选编码/GBK；
+       最后以替换非法字符兜底，保证不抛 `UnicodeDecodeError`。
+    3. **不破坏既有约定**：默认不覆盖已存在的 `os.environ`（override=False）。
+
+    实现方式：
+    - 使用 Dynaconf 内置的 dotenv loader（其解析能力更完整），但我们自行以不同编码
+      打开文件并将 stream 传入，以绕开 Windows 默认编码导致的解码失败。
+
+    Args:
+        override: 是否覆盖已存在的环境变量。
+
+    Returns:
+        找到并成功加载的 `.env` 路径；若不存在或加载失败则返回 None。
+    """
+    dotenv_path = _find_dotenv()
+    if not dotenv_path:
+        return None
+
+    # Dynaconf vendor 的 python-dotenv（随 dynaconf 依赖一起安装）
+    from dynaconf.vendor.dotenv.main import load_dotenv  # local import: avoid global side effects
+
+    preferred = locale.getpreferredencoding(False) or ""
+    encodings: tuple[str, ...] = tuple(dict.fromkeys((
+        "utf-8-sig",
+        "utf-8",
+        preferred,
+        "gbk",
+    )))
+
+    for enc in encodings:
+        if not enc:
+            continue
+        try:
+            with dotenv_path.open("r", encoding=enc) as f:
+                # 通过 stream 传入，避免 loader 自行 open 时采用系统默认编码
+                load_dotenv(stream=f, override=override)
+            return dotenv_path
+        except UnicodeDecodeError:
+            continue
+        except Exception:
+            # 兜底：任何解析异常都不应阻断启动
+            return None
+
+    # 最后兜底：以替换非法字符方式读取，确保不炸
+    try:
+        with dotenv_path.open("r", encoding="utf-8", errors="replace") as f:
+            load_dotenv(stream=f, override=override)
+        return dotenv_path
+    except Exception:
+        return None
 
 
 # ------------------------------------------------------------------
@@ -294,6 +384,18 @@ def _create_dynaconf() -> Dynaconf:
         - 测试环境中应通过依赖注入传入 mock 配置，而不是直接调用此函数
     """
     # 获取项目路径配置（包含 config_file 的完整路径）
+    # ------------------------------------------------------------------
+    # 兼容加载 .env（跨平台：优先 UTF-8，失败回退到系统编码/GBK）
+    #
+    # 说明：
+    # - Windows 中文环境默认编码通常为 GBK/cp936，若 `.env` 实际为 UTF-8，
+    #   Dynaconf 内置 dotenv 读取可能触发 UnicodeDecodeError。
+    # - FastChain 在此处先行以更稳健的编码策略注入 os.environ，然后让 Dynaconf
+    #   禁用内置 dotenv（load_dotenv=False），实现“模板防呆 + 框架兜底”。
+    # ------------------------------------------------------------------
+    _safe_load_dotenv(override=False)
+
+    # 获取项目路径配置（包含 config_file 的完整路径）
     paths = get_path_settings()
 
     # 读取运行环境标识（环境变量优先，默认为 "dev"）
@@ -302,14 +404,14 @@ def _create_dynaconf() -> Dynaconf:
     # 创建 Dynaconf 实例
     # environments=True: 启用多环境支持（在 settings.toml 中使用 [dev]、[prod] 等节）
     # settings_files: 指定配置文件路径（转为字符串以兼容 Dynaconf 2.x）
-    # load_dotenv=True: 自动加载 .env 文件中的环境变量
+    # load_dotenv=False: 由 FastChain 先行以 UTF-8 兼容方式加载 .env，再交由 Dynaconf 合并环境变量
     # merge_enabled=True: 允许多层配置合并（默认配置 + 环境特定配置 + 环境变量）
     # envvar_prefix: 只加载带有此前缀的环境变量（如 APP_CONFIG_APOLLO_SERVER_URL）
     return Dynaconf(
         env=env,
         environments=True,
         settings_files=[str(paths.config_file)],
-        load_dotenv=True,
+        load_dotenv=False,
         merge_enabled=True,
         envvar_prefix=ENVVAR_PREFIX,
     )
