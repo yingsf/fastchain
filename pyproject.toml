@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fastchain-cucc"
-version = "0.1.0a1"
+version = "0.1.2"
 description = "Enterprise-ready FastChain distribution (CUCC)"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 authors = [
   { name = "CUCC", email = "noreply@example.com" },
 ]
