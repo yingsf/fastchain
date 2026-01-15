@@ -363,3 +363,4 @@ data/
 log/
 tmp_git_message.txt
 fastchain.db
+uv.lock
