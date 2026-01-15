@@ -26,7 +26,7 @@ FastChain 的目标是：用 **“Apollo 配置驱动 + 自动发现 + 资源生
   - 统一 `start/stop/health_check`、分层启动、后台 watcher（例如 Apollo watcher/DB health watcher）。
 - **内置资源（可按需启用）**
   - relational（SQLite 默认可跑）
-  - MongoDB、Redis
+  - MongoDB、Redis、Elasticsearch
   - LLM（必需资源：启动 wiring 阶段会要求存在）
   - Prompt（从 Apollo 扫描 `prompts.*` 的 YAML 文本）
   - Scheduler（Job 定时任务）
@@ -148,6 +148,13 @@ fastchain init --apollo-url "http://apollo:8080"
 - `--router-module xxx`：追加 `routers.modules`（可多次）
 - `--prompt-pack none|minimal|all`：prompts 样板生成策略
 
+### 核心资源参数 (core profile 必填)
+
+- `--es-hosts`：Elasticsearch 地址（例如 http://127.0.0.1:9200，逗号分隔），core 模式必填
+- `--es-username / --es-password`：Elasticsearch 认证信息
+- `--mongo-uri / --mongo-database`：MongoDB 连接信息
+- `--redis-url`：Redis 连接 URL
+
 ------
 
 ## 配置体系（必须理解的 3 件事）
@@ -248,7 +255,7 @@ class GatewayClientResource(Resource):
     """
 
     def __init__(self, settings, event_bus):
-        super().__init__(name="gateway_client", kind=ResourceKind.INFRA, priority=50)
+        super().__init__(name="gateway_client", kind=ResourceKind.INFRA, startup_priority=50)
         self.settings = settings
         self.event_bus = event_bus
         self.client: httpx.AsyncClient | None = None
