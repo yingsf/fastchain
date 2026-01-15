@@ -359,6 +359,7 @@ $RECYCLE.BIN/
 # 我的
 fastchain/log/
 fastchain/data/
+fastchain/static/
 data/
 log/
 tmp_git_message.txt

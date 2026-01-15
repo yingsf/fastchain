@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import asyncio
 import importlib
 import inspect
@@ -11,6 +12,7 @@ from typing import List, Optional, Any, Set
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from prometheus_client import make_asgi_app
 
@@ -559,6 +561,44 @@ class FastChainApp:
         except Exception as e:
             logger.error(f"应用 CORS 配置时出错: {e}")
 
+    def _setup_static_files(self, app: FastAPI) -> None:
+        """配置并挂载静态资源服务
+
+        从 system.config -> server -> static_files 读取配置，自动创建目录并挂载 StaticFiles
+        """
+        ns = self.settings.local.apollo_namespace
+        try:
+            # 1. 读取配置
+            sys_conf = self.settings.get_value(ns, "system.config", default={})
+            if not isinstance(sys_conf, dict): return
+
+            # 读取 server.static_files 节点
+            server_conf = sys_conf.get("server", {})
+            static_conf = server_conf.get("static_files", {})
+
+            # 2. 检查开关
+            if not static_conf.get("enabled", False):
+                return
+
+            # 3. 获取配置参数
+            mount_path = static_conf.get("mount_path", "/static")
+            directory = static_conf.get("directory", "static")
+            name = static_conf.get("name", "static")
+
+            # 4. 自动创建物理目录 (防止 StaticFiles 报错)
+            if not os.path.exists(directory):
+                logger.warning(f"静态资源目录 '{directory}' 不存在，尝试自动创建...")
+                os.makedirs(directory, exist_ok=True)
+
+            logger.info(f"📂 正在挂载静态资源服务: {mount_path} -> ./{directory}")
+
+            # 5. 挂载服务
+            app.mount(mount_path, StaticFiles(directory=directory), name=name)
+            logger.success(f"静态资源服务已就绪")
+
+        except Exception as e:
+            logger.error(f"❌ 挂载静态资源失败: {e}")
+
     def build(self) -> FastAPI:
         """构建并返回配置完成的 FastAPI 应用实例
 
@@ -592,6 +632,9 @@ class FastChainApp:
         # 注册所有自动发现的路由器
         for router in self._routers:
             self._fastapi_app.include_router(router)
+
+        # 挂载静态资源服务 (在路由注册之后，中间件之前)
+        self._setup_static_files(self._fastapi_app)
 
         # 注册中间件（注册顺序决定执行顺序）
         # 1. PrometheusMiddleware: 收集请求指标（响应时间、状态码等）
