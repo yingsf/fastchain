@@ -139,6 +139,8 @@ class ResourceKind(str, Enum):
     COMPONENT = "component"
     # 消息队列
     MESSAGE_BROKER = "message_broker"
+    # 向量数据库
+    VECTOR_STORE = "vector_store"
 
 
 # 应用级常量
