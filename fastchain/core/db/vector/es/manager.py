@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-from pathlib import Path
 from typing import Optional, Set, Any, Dict, override
 
 import elasticsearch
@@ -341,6 +339,9 @@ class ElasticsearchManager(Resource):
     def _load_config(self) -> Optional[ElasticsearchConfig]:
         """从 SettingsManager 加载并解析 ES 配置
 
+        完全信任 Apollo 配置中的路径值。这意味着如果在 Apollo 中配置了相对路径，它将相对于进程的工作目录（CWD）
+        强烈建议在 Apollo 中始终配置完整绝对路径（如 /etc/secrets/certs/...），以确保确定性
+
         Returns:
             Optional[ElasticsearchConfig]: 解析成功返回配置对象，否则返回 None
         """
@@ -348,30 +349,25 @@ class ElasticsearchManager(Resource):
             ns = self._settings.local.apollo_namespace
             section = self._settings.get_section(ns)
 
+            # 获取 system.config
             sys_conf_raw = section.values.get("system.config")
             if not sys_conf_raw:
                 return None
 
+            # 兼容 JSON 字符串或直接 Dict
             if isinstance(sys_conf_raw, str):
                 sys_conf = json.loads(sys_conf_raw)
             else:
                 sys_conf = sys_conf_raw
 
+            # 获取 elasticsearch 节点
             es_conf = sys_conf.get("elasticsearch")
             if not es_conf:
                 return None
 
             conf_data = es_conf.copy()
+            # 移除可能存在的 enabled 字段，避免污染 Config 模型
             conf_data.pop("enabled", None)
-
-            # 强制使用 CWD/config 作为相对路径基准，确保路径可控
-            config_dir = os.path.abspath("config")
-
-            for field in ["ca_certs", "client_cert", "client_key"]:
-                val = conf_data.get(field)
-                if val and not Path(val).is_absolute():
-                    full_path = os.path.join(config_dir, val)
-                    conf_data[field] = full_path
 
             return ElasticsearchConfig(**conf_data)
 
