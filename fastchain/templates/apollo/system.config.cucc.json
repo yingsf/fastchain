@@ -29,6 +29,23 @@
     "encoding": "utf-8",
     "decode_responses": true
   },
+  "elasticsearch": {
+    "hosts": [
+      "http://127.0.0.1:9200"
+    ],
+    "username": "<user>",
+    "password": "<password>",
+    "sniff_on_start": false,
+    "sniff_on_connection_fail": false,
+    "verify_certs": false,
+    "ca_certs": null,
+    "client_cert": null,
+    "client_key": null,
+    "request_timeout": 30.0,
+    "max_connections": 50,
+    "max_retries": 3,
+    "retry_on_timeout": true
+  },
   "prompts": { "prefix": "prompts." },
   "llm_service": {
     "structure_retry_count": 3,
@@ -69,6 +86,7 @@
       "fastchain.core.db.mongo",
       "fastchain.core.llm",
       "fastchain.core.db.redis",
+      "fastchain.core.db.vecotr.es",
       "fastchain.core.scheduler",
       "{resource_root}"
     ]

@@ -131,6 +131,9 @@ def _build_system_config(
         mongo_database: str | None,
         mongo_models_package: str | None,
         redis_url: str | None,
+        es_hosts: str | None,
+        es_username: str | None,
+        es_password: str | None,
 ) -> dict:
     """构建 Apollo 中 system.config 的配置对象（最终写入为 JSON 字符串）
 
@@ -141,6 +144,7 @@ def _build_system_config(
         - resources.modules：非空 list[str]
         - routers.modules：非空 list[str]
     """
+    # 1. 基础配置（框架启动必需）
     cfg: dict = {
         "apollo": {
             "poll_interval": 10,
@@ -167,8 +171,11 @@ def _build_system_config(
             "audit_log_max_length": 2000,
             "stream_buffer_max_tokens": 10_000,
             "cors": {
-                "enabled": False,
-                "allow_origins": ["http://localhost:3000"],
+                "enabled": True,
+                "allow_origins": [
+                    "http://localhost:3000",
+                    "https://your-frontend-domain.com"
+                ],
                 "allow_methods": ["*"],
                 "allow_headers": ["*"],
                 "allow_credentials": True,
@@ -193,6 +200,7 @@ def _build_system_config(
         "routers": {"modules": router_modules},
     }
 
+    # 2. 扩展数据源配置（按 profile 动态注入）
     if profile == "core":
         cfg["mongodb"] = {
             "uri": mongo_uri,
@@ -212,8 +220,28 @@ def _build_system_config(
             "encoding": "utf-8",
             "decode_responses": True,
         }
+
+        # 注入 Elasticsearch 配置（Core 模式：使用 CLI 参数或默认值）
+        cfg["elasticsearch"] = {
+            # 如果 CLI 提供了 hosts 字符串，分割为列表；否则使用本地默认值
+            "hosts": [h.strip() for h in es_hosts.split(",")] if es_hosts else ["http://127.0.0.1:9200"],
+            "username": es_username,
+            "password": es_password,
+            # 其他参数使用标准默认值
+            "sniff_on_start": False,
+            "sniff_on_connection_fail": False,
+            "verify_certs": False,
+            "ca_certs": None,
+            "client_cert": None,
+            "client_key": None,
+            "request_timeout": 30.0,
+            "max_connections": 50,
+            "max_retries": 3,
+            "retry_on_timeout": True
+        }
+
     else:
-        # minimal：仅占位，不启用模块不会生效
+        # Minimal 模式：仅生成占位符，不启用功能
         cfg["mongodb"] = {
             "uri": "mongodb://<user>:<password>@<host>:<port>/?authSource=<db>&authMechanism=SCRAM-SHA-1",
             "database": "<db_name>",
@@ -231,6 +259,21 @@ def _build_system_config(
             "retry_on_timeout": True,
             "encoding": "utf-8",
             "decode_responses": True,
+        }
+        cfg["elasticsearch"] = {
+            "hosts": ["http://<host>:<port>"],
+            "username": "<user>",
+            "password": "<password>",
+            "sniff_on_start": False,
+            "sniff_on_connection_fail": False,
+            "verify_certs": False,
+            "ca_certs": None,
+            "client_cert": None,
+            "client_key": None,
+            "request_timeout": 30.0,
+            "max_connections": 50,
+            "max_retries": 3,
+            "retry_on_timeout": True
         }
 
     return cfg
@@ -294,13 +337,14 @@ def _post_init_reminder(
     if resources_profile == "minimal":
         lines += [
             "   - 默认启用 relational + llm + 项目自身资源包，保证框架可启动",
-            "   - mongodb/redis 仅提供占位配置块，不启用对应资源模块则不会生效（不炸）",
-            "   - 三件套（relational+mongo+redis）请用：--resources-profile core 并补齐 mongo/redis 参数",
+            "   - mongodb/redis/elasticsearch 仅提供占位配置块，不启用对应资源模块则不会生效（不炸）",
+            "   - 全家桶（relational+mongo+redis+es）请用：--resources-profile core 并补齐参数",
             "",
         ]
     else:
         lines += [
-            "   - 已启用 relational + llm + MongoDB + Redis（缺配置会 fail-fast，因此 CLI 强制要求提供参数）",
+            "   - 已启用 relational + llm + MongoDB + Redis + Elasticsearch + Scheduler",
+            "   - (缺配置会 fail-fast，因此 CLI 强制要求提供参数)",
             "",
         ]
 
@@ -401,7 +445,14 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     # minimal 也必须默认启用 LLM，否则启动 wiring 阶段会缺 ResourceName.LLM
     base_resources = ["fastchain.core.db.relational", "fastchain.core.llm"]
-    core_resources = ["fastchain.core.db.mongo", "fastchain.core.db.redis"]
+
+    # core: 增加 mongodb, redis, elasticsearch, scheduler
+    core_resources = [
+        "fastchain.core.db.mongo",
+        "fastchain.core.db.redis",
+        "fastchain.core.db.es",  # ES 资源
+        "fastchain.core.scheduler"  # 调度器资源
+    ]
 
     resource_modules = (
         _dedupe_keep_order(base_resources + core_resources + [resource_root])
@@ -416,6 +467,11 @@ def cmd_init(args: argparse.Namespace) -> int:
     mongo_models_package = args.mongo_models_package.strip() if args.mongo_models_package else None
     redis_url = args.redis_url.strip() if args.redis_url else None
 
+    # ES 参数
+    es_hosts = args.es_hosts.strip() if args.es_hosts else None
+    es_username = args.es_username.strip() if args.es_username else None
+    es_password = args.es_password.strip() if args.es_password else None
+
     if resources_profile == "core":
         missing = [
             flag
@@ -424,6 +480,7 @@ def cmd_init(args: argparse.Namespace) -> int:
                 ("--mongo-database", mongo_database),
                 ("--mongo-models-package", mongo_models_package),
                 ("--redis-url", redis_url),
+                ("--es-hosts", es_hosts),  # 核心模式下 ES hosts 必填
             ]
             if not value
         ]
@@ -531,7 +588,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
     # 业务包骨架
     _write_file(target / app_pkg / "__init__.py", _read_template("project_app_init.py"), force=args.force)
-    _write_file(target / app_pkg / "resources" / "__init__.py", _read_template("project_resources_init.py"), force=args.force)
+    _write_file(target / app_pkg / "resources" / "__init__.py", _read_template("project_resources_init.py"),
+                force=args.force)
     _write_file(target / app_pkg / "api" / "__init__.py", _read_template("project_api_init.py"), force=args.force)
     _write_file(target / app_pkg / "api" / "health.py", _read_template("project_api_health.py"), force=args.force)
 
@@ -548,11 +606,15 @@ def cmd_init(args: argparse.Namespace) -> int:
             mongo_database=mongo_database,
             mongo_models_package=mongo_models_package,
             redis_url=redis_url,
+            es_hosts=es_hosts,
+            es_username=es_username,
+            es_password=es_password,
         )
         _write_json(apollo_example_dir / "system.config.json", system_cfg, force=args.force)
 
         _write_file(apollo_example_dir / "llm.models.json", _read_template("apollo/llm.models.json"), force=args.force)
-        _write_file(apollo_example_dir / "jobs.config.json", _read_template("apollo/jobs.config.json"), force=args.force)
+        _write_file(apollo_example_dir / "jobs.config.json", _read_template("apollo/jobs.config.json"),
+                    force=args.force)
 
         if prompt_pack in ("minimal", "all"):
             _write_file(
@@ -593,12 +655,12 @@ def cmd_init(args: argparse.Namespace) -> int:
         if resources_profile == "minimal":
             readme_lines += [
                 "  - 默认启用 relational + llm + 项目资源包，保证框架可启动\n",
-                "  - system.config 中包含 mongodb/redis 占位配置块，但不会生效（未启用对应资源模块）\n",
-                "  - 如需启用 MongoDB/Redis，请用：`--resources-profile core` 并提供 mongo/redis 参数\n\n",
+                "  - system.config 中包含 mongodb/redis/es 占位配置块，但不会生效（未启用对应资源模块）\n",
+                "  - 如需启用 MongoDB/Redis/ES，请用：`--resources-profile core` 并提供相关参数\n\n",
             ]
         else:
             readme_lines += [
-                "  - 已启用 relational + llm + MongoDB + Redis；缺配置会 fail-fast，所以 CLI 已强制要求你提供参数\n\n",
+                "  - 已启用 relational + llm + MongoDB + Redis + Elasticsearch + Scheduler；缺配置会 fail-fast，所以 CLI 已强制要求你提供参数\n\n",
             ]
 
         readme_lines += [
@@ -648,7 +710,8 @@ def cmd_init(args: argparse.Namespace) -> int:
     )
 
     if in_place_mode:
-        print("✅ 检测到当前目录已存在工程标识（uv.lock/.venv 等）。CLI 将以“补齐缺失文件”为主，不会覆盖已有 pyproject.toml。")
+        print(
+            "✅ 检测到当前目录已存在工程标识（uv.lock/.venv 等）。CLI 将以“补齐缺失文件”为主，不会覆盖已有 pyproject.toml。")
         print("✅ 注意：FastChain CLI 不会创建虚拟环境；请使用 `uv venv` / `uv sync` 管理项目依赖。")
 
     if args.write_apollo_examples:
@@ -726,15 +789,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--no-env", action="store_false", dest="with_env", help="不生成 .env")
 
     # Apollo samples
-    p_init.add_argument("--write-apollo-examples", action="store_true", default=True, help="生成 Apollo 样板文件（默认生成）")
-    p_init.add_argument("--no-apollo-examples", action="store_false", dest="write_apollo_examples", help="不生成 Apollo 样板文件")
+    p_init.add_argument("--write-apollo-examples", action="store_true", default=True,
+                        help="生成 Apollo 样板文件（默认生成）")
+    p_init.add_argument("--no-apollo-examples", action="store_false", dest="write_apollo_examples",
+                        help="不生成 Apollo 样板文件")
 
     # Profiles & composition
     p_init.add_argument(
         "--resources-profile",
         choices=["minimal", "core"],
         default="minimal",
-        help="资源模块 profile：minimal（默认不炸）/ core（启用 relational+mongo+redis，需补齐参数）",
+        help="资源模块 profile：minimal（默认不炸）/ core（启用全家桶 relational+mongo+redis+es+scheduler，需补齐参数）",
     )
     p_init.add_argument(
         "--router-module",
@@ -756,13 +821,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--apollo-cluster", default="default", help="Apollo cluster（默认 default）")
     p_init.add_argument("--apollo-namespace", default="application", help="Apollo namespace（默认 application）")
 
-    # DB/Mongo/Redis params (written into system.config.json sample)
-    p_init.add_argument("--db-url", default="sqlite+aiosqlite:///./fastchain.db", help="relational 数据库 URL（默认 sqlite）")
+    # DB/Mongo/Redis/ES params (written into system.config.json sample)
+    p_init.add_argument("--db-url", default="sqlite+aiosqlite:///./fastchain.db",
+                        help="relational 数据库 URL（默认 sqlite）")
 
     p_init.add_argument("--mongo-uri", default=None, help="MongoDB URI（core profile 必填）")
     p_init.add_argument("--mongo-database", default=None, help="MongoDB database（core profile 必填）")
     p_init.add_argument("--mongo-models-package", default=None, help="Mongo models 包路径（core profile 必填）")
     p_init.add_argument("--redis-url", default=None, help="Redis URL（core profile 必填）")
+
+    # Elasticsearch params
+    p_init.add_argument("--es-hosts", default=None,
+                        help="Elasticsearch hosts，逗号分隔（core profile 必填，如 http://127.0.0.1:9200）")
+    p_init.add_argument("--es-username", default=None, help="Elasticsearch username")
+    p_init.add_argument("--es-password", default=None, help="Elasticsearch password")
 
     p_init.set_defaults(func=cmd_init)
 
